@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hindi Cirrus — Voyant-style Corpus Analysis</title>
+
+<!-- Browser-side document readers -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.9.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.5.3/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<style>
+:root{
+ --bg:#f4f5f7;--panel:#fff;--line:#d9dde3;--text:#22272e;--muted:#68717d;
+ --accent:#4b79a8;--accent2:#6d5cae;--dark:#2d333b;--hover:#eef2f6;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Arial,Helvetica,sans-serif;font-size:14px}
+button,input,select,textarea{font:inherit}
+button{cursor:pointer}
+.header{height:54px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 16px;gap:14px}
+.logo{font-size:20px;font-weight:700;color:#333}
+.logo b{color:var(--accent)}
+.header-sub{color:#89919b;font-size:12px}
+.header-spacer{flex:1}
+.lang{display:flex;gap:6px;align-items:center}
+.lang button{border:1px solid var(--line);background:#fff;border-radius:4px;padding:6px 10px}
+.lang button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.translate{border:1px solid var(--line);background:#fff;padding:7px 11px;border-radius:4px;color:#3d5d7c;font-weight:600}
+.toolbar{background:#fafbfc;border-bottom:1px solid var(--line);padding:9px 16px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.toolbar button,.toolbar select{border:1px solid var(--line);background:#fff;border-radius:4px;padding:7px 10px;color:#3f4650}
+.toolbar .primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.status{margin-left:auto;color:#737c87;font-size:12px}
+.workspace{padding:12px;max-width:1500px;margin:auto}
+.corpusbar{background:#fff;border:1px solid var(--line);padding:10px 12px;display:flex;gap:10px;align-items:center;margin-bottom:10px;border-radius:3px}
+.corpusbar strong{font-size:13px}
+.filelist{display:flex;gap:6px;flex-wrap:wrap}
+.filechip{background:#f1f3f6;border:1px solid #dfe3e8;border-radius:14px;padding:4px 9px;font-size:11px;cursor:pointer;transition:.12s;user-select:none}.filechip:hover{background:#e8eef5;border-color:#b8c7d7}.filechip.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.main{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:10px}
+.panel{background:var(--panel);border:1px solid var(--line);min-height:540px;border-radius:3px;overflow:hidden}
+.panelhead{height:44px;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 12px;gap:10px;background:#fafbfc}
+.panelhead h2{font-size:14px;margin:0;font-weight:700}
+.panelhead .tools{margin-left:auto;display:flex;gap:5px}
+.iconbtn{border:0;background:transparent;padding:5px;color:#66717d}
+.panelbody{padding:12px}
+.cirrus-controls{display:flex;gap:14px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #e5e7eb;padding-bottom:10px;margin-bottom:8px}
+.control{display:flex;gap:6px;align-items:center;color:#59636e;font-size:12px}
+.control select{padding:5px 7px;border:1px solid #ccd2da;background:#fff;border-radius:3px}
+.control input[type=range]{width:130px}
+.cloud{height:445px;position:relative;overflow:hidden;border:1px solid #eef0f3;background:#fff}
+.word{position:absolute;transform:translate(-50%,-50%);font-family:Georgia,"Times New Roman",serif;font-weight:500;white-space:nowrap;user-select:none;cursor:pointer;transition:opacity .12s,transform .12s}
+.word:hover{opacity:.65;transform:translate(-50%,-50%) scale(1.04)}
+.scale-note{font-size:11px;color:#89919b;padding:7px 2px}
+.table{width:100%;border-collapse:collapse;font-size:12px}
+.table th,.table td{padding:8px 7px;border-bottom:1px solid #e8ebee;text-align:left}
+.table th{color:#68717d;font-weight:600;background:#fafbfc}
+.table td.num,.table th.num{text-align:right}
+.rowclick{cursor:pointer}.rowclick:hover{background:#f5f7f9}
+.side-tabs{display:flex;border-bottom:1px solid var(--line)}
+.side-tabs button{flex:1;border:0;background:#fafbfc;padding:10px 4px;font-size:11px;color:#68717d}
+.side-tabs button.active{background:#fff;color:#3e5871;border-bottom:2px solid var(--accent);font-weight:700}
+.side-content{padding:12px}
+.metric{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.metric div{border:1px solid #e3e6ea;background:#fafbfc;padding:10px}
+.metric strong{display:block;font-size:20px}.metric span{font-size:10px;color:#77808b}
+.info{font-size:12px;line-height:1.6;color:#626b76}
+.doc{padding:12px;border:1px solid #e4e7eb;background:#fff;max-height:430px;overflow:auto;white-space:pre-wrap;line-height:1.65;font-family:Georgia,serif}
+.search{display:flex;gap:6px;margin-bottom:9px}.search input{flex:1;border:1px solid #cfd5dc;padding:7px;border-radius:3px}
+.empty{padding:70px 20px;text-align:center;color:#89919b;font-size:13px}
+.footer{padding:12px;text-align:center;color:#89919b;font-size:11px}
+.toast{position:fixed;right:18px;bottom:18px;background:#2f353c;color:#fff;padding:10px 14px;border-radius:4px;font-size:12px;display:none;z-index:20}
+.modal{display:none;position:fixed;inset:0;background:#0007;z-index:10;align-items:center;justify-content:center}
+.modal.open{display:flex}.dialog{width:min(680px,92vw);background:#fff;border-radius:5px;box-shadow:0 20px 60px #0005}
+.dialoghead{padding:14px 16px;border-bottom:1px solid var(--line);font-weight:700;display:flex}.dialoghead span:last-child{margin-left:auto;cursor:pointer}
+.dialogbody{padding:16px}.drop{border:2px dashed #cbd2da;padding:34px;text-align:center;color:#69727e}.drop.drag{background:#eef4f9;border-color:var(--accent)}
+.fileinput{display:none}
+.options-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.opt{border:1px solid #e1e4e8;padding:10px}.opt label{display:block;font-size:11px;color:#68717d;margin-bottom:5px}
+@media(max-width:1000px){.main{grid-template-columns:1fr}.panel{min-height:auto}.cloud{height:400px}}
+@media(max-width:650px){.header{padding:0 9px}.header-sub{display:none}.workspace{padding:6px}.toolbar{padding:7px}.status{width:100%;margin-left:0}.options-grid{grid-template-columns:1fr}}
+</style>
+</head>
+
+<body>
+<header class="header">
+  <div class="logo">Hindi <b>Cirrus</b></div>
+  <div class="header-sub" id="subtitle">Voyant-style corpus analysis</div>
+  <div class="header-spacer"></div>
+  <button class="translate" id="translateBtn">हिंदी → English</button>
+  <div class="lang">
+    <button id="hiBtn" class="active">हिंदी</button>
+    <button id="enBtn">English</button>
+  </div>
+</header>
+
+<div class="toolbar">
+  <button class="primary" id="addBtn">＋ <span data-hi="टेक्स्ट जोड़ें" data-en="Add Texts">टेक्स्ट जोड़ें</span></button>
+  <button id="pasteBtn">▤ <span data-hi="टेक्स्ट पेस्ट करें" data-en="Paste Text">टेक्स्ट पेस्ट करें</span></button>
+  <button id="clearBtn">× <span data-hi="साफ करें" data-en="Clear Corpus">साफ करें</span></button>
+  <button id="downloadBtn">↓ <span data-hi="रिपोर्ट डाउनलोड" data-en="Download Report">रिपोर्ट डाउनलोड</span></button>
+  <span class="status" id="status">कोई दस्तावेज़ नहीं</span>
+</div>
+
+<main class="workspace">
+  <div class="corpusbar">
+    <strong data-hi="Corpus:" data-en="Corpus:">Corpus:</strong>
+    <span id="docCount">0 दस्तावेज़</span>
+    <div class="filelist" id="filelist"></div>
+  </div>
+
+  <div class="main">
+    <section class="panel">
+      <div class="panelhead">
+        <h2 id="toolTitle">Cirrus</h2>
+        <div class="tools">
+          <button class="iconbtn" id="optBtn" title="Options">⚙</button>
+          <button class="iconbtn" id="helpBtn" title="Help">?</button>
+        </div>
+      </div>
+      <div class="panelbody">
+        <div class="cirrus-controls">
+          <div class="control"><span data-hi="Scale" data-en="Scale">Scale</span>
+            <select id="scale"><option value="corpus">Corpus</option><option value="document">Document</option></select>
+          </div>
+          <div class="control"><span data-hi="Terms:" data-en="Terms:">Terms:</span>
+            <input id="visible" type="range" min="10" max="150" value="50">
+            <span id="visibleVal">50</span>
+          </div>
+          <div class="control"><span data-hi="स्टॉपवर्ड" data-en="Stopwords">स्टॉपवर्ड</span>
+            <input id="stopToggle" type="checkbox" checked>
+          </div>
+        </div>
+        <div class="cloud" id="cloud">
+          <div class="empty">☁<br>टेक्स्ट जोड़ें और Cirrus word cloud बनाएं।</div>
+        </div>
+        <div class="scale-note" id="cloudNote">Cirrus: corpus में सबसे अधिक बार आने वाले terms का दृश्य प्रतिनिधित्व।</div>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <div class="side-tabs">
+        <button class="active" data-tab="terms">Terms</button>
+        <button data-tab="summary">Summary</button>
+        <button data-tab="reader">Reader</button>
+      </div>
+      <div id="termsTab" class="side-content">
+        <div class="search"><input id="termSearch" placeholder="term खोजें…"><button id="searchBtn">⌕</button></div>
+        <table class="table">
+          <thead><tr><th>Term</th><th class="num">Count</th><th class="num">Relative</th></tr></thead>
+          <tbody id="termsBody"></tbody>
+        </table>
+      </div>
+      <div id="summaryTab" class="side-content" style="display:none">
+        <div class="metric">
+          <div><strong id="mWords">0</strong><span>WORDS</span></div>
+          <div><strong id="mTypes">0</strong><span>TYPES</span></div>
+          <div><strong id="mDocs">0</strong><span>DOCUMENTS</span></div>
+          <div><strong id="mDensity">0</strong><span>VOCABULARY DENSITY</span></div>
+        </div>
+        <div class="info" id="summaryInfo">Corpus का सारांश यहां दिखाई देगा।</div>
+      </div>
+      <div id="readerTab" class="side-content" style="display:none">
+        <select id="docSelect" style="width:100%;padding:7px;border:1px solid #d0d5db;margin-bottom:8px"></select>
+        <div class="doc" id="reader">दस्तावेज़ चुनें।</div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="panel" style="margin-top:10px">
+    <div class="panelhead"><h2>Trends</h2><div class="tools"><span style="font-size:11px;color:#89919b" id="trendTerm">term चुनें</span></div></div>
+    <div class="panelbody" style="padding:8px">
+      <svg id="trendSvg" viewBox="0 0 900 180" width="100%" height="180" role="img"></svg>
+    </div>
+  </div>
+</main>
+
+<div class="footer">Hindi Cirrus · Voyant-style local corpus analysis · Cirrus controls follow Voyant's documented concepts of scale, visible terms and stop lists.</div>
+<div class="toast" id="toast"></div>
+
+<div class="modal" id="uploadModal">
+ <div class="dialog">
+  <div class="dialoghead"><span data-hi="Corpus में फ़ाइलें जोड़ें" data-en="Add files to corpus">Corpus में फ़ाइलें जोड़ें</span><span id="closeUpload">×</span></div>
+  <div class="dialogbody">
+   <div class="drop" id="drop">
+    <strong data-hi="फ़ाइलें यहां खींचें और छोड़ें" data-en="Drag and drop files here">फ़ाइलें यहां खींचें और छोड़ें</strong><br>
+    <small>PDF · DOCX · PPTX · XLSX · CSV · TXT · MD · HTML · JSON</small><br><br>
+    <button class="primary" id="chooseFiles">फ़ाइल चुनें</button>
+    <input class="fileinput" id="fileInput" type="file" multiple accept=".pdf,.docx,.pptx,.xlsx,.xls,.csv,.txt,.md,.html,.htm,.json,.xml">
+   </div>
+  </div>
+ </div>
+</div>
+
+<div class="modal" id="pasteModal">
+ <div class="dialog">
+  <div class="dialoghead"><span data-hi="टेक्स्ट जोड़ें" data-en="Add text">टेक्स्ट जोड़ें</span><span id="closePaste">×</span></div>
+  <div class="dialogbody">
+   <input id="pasteTitle" placeholder="Document title" style="width:100%;padding:8px;border:1px solid #ccd2da;margin-bottom:8px">
+   <textarea id="pasteText" style="width:100%;height:260px;padding:10px;border:1px solid #ccd2da" placeholder="यहां टेक्स्ट पेस्ट करें…"></textarea>
+   <br><br><button class="primary" id="addPasted">Corpus में जोड़ें</button>
+  </div>
+ </div>
+</div>
+
+<div class="modal" id="optModal">
+ <div class="dialog">
+  <div class="dialoghead"><span>Cirrus Options</span><span id="closeOpt">×</span></div>
+  <div class="dialogbody">
+   <div class="options-grid">
+    <div class="opt"><label>FONT</label><select id="fontOpt"><option>Georgia</option><option>Arial</option><option>Palatino</option><option>Verdana</option></select></div>
+    <div class="opt"><label>PALETTE</label><select id="paletteOpt"><option value="voyant">Voyant</option><option value="mono">Monochrome</option><option value="hindi">Hindi</option></select></div>
+    <div class="opt"><label>BACKGROUND</label><select id="bgOpt"><option value="white">White</option><option value="soft">Soft</option><option value="dark">Dark</option></select></div>
+    <div class="opt"><label>MAX TERMS</label><input id="maxTerms" type="number" min="10" max="500" value="500"></div>
+   </div>
+   <br><button class="primary" id="applyOpt">Apply</button>
+  </div>
+ </div>
+</div>
+
+<script>
+/* ---------- i18n ---------- */
+let UI_LANG='hi';
+const UI={
+hi:{add:'टेक्स्ट जोड़ें',paste:'टेक्स्ट पेस्ट करें',clear:'साफ करें',download:'रिपोर्ट डाउनलोड',none:'कोई दस्तावेज़ नहीं',docs:'दस्तावेज़',
+empty:'टेक्स्ट जोड़ें और Cirrus word cloud बनाएं।',summary:'Corpus का सारांश यहां दिखाई देगा।'},
+en:{add:'Add Texts',paste:'Paste Text',clear:'Clear Corpus',download:'Download Report',none:'No documents',docs:'documents',
+empty:'Add text and generate the Cirrus word cloud.',summary:'Corpus summary appears here.'}
+};
+function setLang(l){
+ UI_LANG=l; hiBtn.classList.toggle('active',l==='hi'); enBtn.classList.toggle('active',l==='en');
+ document.querySelectorAll('[data-hi]').forEach(e=>e.textContent=e.dataset[l==='hi'?'hi':'en']);
+ status.textContent=docs.length?`${docs.length} ${l==='hi'?'दस्तावेज़':'documents'}`:UI[l].none;
+ subtitle.textContent=l==='hi'?'Voyant-style corpus analysis':'Voyant-style corpus analysis';
+}
+hiBtn.onclick=()=>setLang('hi'); enBtn.onclick=()=>setLang('en');
+translateBtn.onclick=()=>{ translateMode=translateMode==='hi-en'?'en-hi':'hi-en'; translateBtn.textContent=translateMode==='hi-en'?'हिंदी → English':'English → हिंदी'; showToast(translateMode==='hi-en'?'Translation direction: Hindi → English':'Translation direction: English → Hindi'); };
+let translateMode='hi-en';
+
+/* ---------- corpus ---------- */
+let docs=[];
+let selectedDocIndex=0;
+let settings={visible:50,stop:true,maxTerms:500,font:'Georgia',palette:'voyant',bg:'white'};
+const stopHi=new Set(('और है हैं का की के को से में पर यह वह एक हम हमें अपने लिए भी तो था थी थे जो इस उस कर करना हो होता होने ने कि तक या लेकिन बहुत तथा द्वारा नहीं नहीं है था थे मैं तुम आप वह ये उन उन् तथा एक दो तीन'.split(/\s+/)));
+const stopEn=new Set(('the a an and or is are was were of to in on for with this that it as by be from we our you your they have has had not but at into about over under after before between while who whom which what where when why how'.split(/\s+/)));
+const stop=new Set([...stopHi,...stopEn]);
+
+function normalize(s){return (s||'').normalize('NFC').replace(/\u00ad/g,'').replace(/\s+/g,' ').trim()}
+function tokenize(text){
+ return normalize(text).toLocaleLowerCase().match(/[a-z0-9]+(?:['’][a-z]+)?|[\u0900-\u097f]+/gu)||[];
+}
+function termsFor(text){
+ let ws=tokenize(text);
+ if(settings.stop) ws=ws.filter(w=>!stop.has(w));
+ const c=new Map();
+ for(const w of ws)c.set(w,(c.get(w)||0)+1);
+ return {words:ws.length,counts:c};
+}
+function corpusText(){return docs.map(d=>d.text).join('\n\n---\n\n')}
+function activeText(){
+ if(scale.value==='document' && docs.length) return docs[selectedDocIndex]?.text || '';
+ return corpusText();
+}
+function getTerms(){
+ const c=termsFor(activeText()).counts;
+ return [...c.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
+}
+function selectDocument(index){
+ if(!docs.length)return;
+ selectedDocIndex=Math.max(0,Math.min(Number(index),docs.length-1));
+ docSelect.value=String(selectedDocIndex);
+ document.querySelectorAll('.filechip').forEach((el,i)=>el.classList.toggle('active',i===selectedDocIndex));
+ scale.value='document';
+ reader.textContent=docs[selectedDocIndex].text;
+ renderAll();
+ showToast(UI_LANG==='hi'?`चुना गया: ${docs[selectedDocIndex].name}`:`Selected: ${docs[selectedDocIndex].name}`);
+}
+function relative(n,total){return total?(n/total*100).toFixed(2)+'%':'0%'}
+function renderAll(){
+ renderCloud();renderTerms();renderSummary();renderDocs();renderTrend(window.selectedTerm||null);
+}
+function renderCloud(){
+ const box=cloud;box.innerHTML='';
+ const arr=getTerms().slice(0,Math.min(settings.maxTerms,settings.visible));
+ if(!arr.length){box.innerHTML=`<div class="empty">${UI[UI_LANG].empty}</div>`;return}
+ const total=arr.reduce((s,x)=>s+x[1],0), max=arr[0][1], min=arr[arr.length-1][1];
+ const colors=settings.palette==='mono'?['#3d4650']:settings.palette==='hindi'?['#7b3f00','#00695c','#5b3f8c','#315b8a','#9c3b56']:['#3d6e9e','#7b5ea7','#4d8b76','#a46b35','#6c7480'];
+ if(settings.bg==='dark'){box.style.background='#20242a';}else if(settings.bg==='soft'){box.style.background='#f8f8fb';}else box.style.background='#fff';
+ const W=box.clientWidth||800,H=box.clientHeight||445;
+ let placed=[], tries=0;
+ for(let i=0;i<arr.length && placed.length<settings.visible;i++){
+   const [word,n]=arr[i];const size=max===min?34:16+42*Math.sqrt((n-min)/(max-min||1));
+   let ok=false,x=0,y=0;
+   for(let k=0;k<600&&!ok;k++){
+     x=70+Math.random()*(W-140);y=35+Math.random()*(H-70);
+     const bw=word.length*size*.52,bh=size*1.05;
+     if(x-bw/2<3||x+bw/2>W-3||y-bh/2<3||y+bh/2>H-3)continue;
+     ok=!placed.some(p=>Math.abs(x-p.x)<(bw+p.bw)/2+5&&Math.abs(y-p.y)<(bh+p.bh)/2+5);
+   }
+   if(!ok)continue;
+   const s=document.createElement('span');s.className='word';s.textContent=word;s.title=`${word}: ${n}`;
+   s.style.left=x+'px';s.style.top=y+'px';s.style.fontSize=size+'px';s.style.color=colors[i%colors.length];
+   s.onclick=()=>selectTerm(word);box.appendChild(s);placed.push({x,y,bw:word.length*size*.52,bh:size*1.05});tries++;
+ }
+ cloudNote.textContent=UI_LANG==='hi'?`Cirrus · ${arr.length} terms दिखाए गए · कुल ${getTerms().length} unique terms`:`Cirrus · ${arr.length} terms shown · ${getTerms().length} unique terms`;
+}
+function renderTerms(){
+ const body=termsBody;body.innerHTML='';const arr=getTerms();const total=arr.reduce((s,x)=>s+x[1],0);
+ const q=termSearch.value.toLocaleLowerCase();
+ arr.filter(x=>x[0].includes(q)).slice(0,100).forEach(([w,n])=>{
+   const tr=document.createElement('tr');tr.className='rowclick';
+   tr.innerHTML=`<td>${escapeHtml(w)}</td><td class="num">${n}</td><td class="num">${relative(n,total)}</td>`;
+   tr.onclick=()=>selectTerm(w);body.appendChild(tr);
+ });
+}
+function renderSummary(){
+ const raw=corpusText(), t=tokenize(raw), types=new Set(t);
+ mWords.textContent=t.length;mTypes.textContent=types.size;mDocs.textContent=docs.length;
+ mDensity.textContent=t.length?(types.size/t.length).toFixed(3):'0';
+ summaryInfo.innerHTML=docs.length?
+ `Corpus में <b>${docs.length}</b> documents, <b>${t.length}</b> tokens और <b>${types.size}</b> unique word forms हैं।<br><br>`+
+ `सबसे अधिक frequent terms: ${getTerms().slice(0,5).map(x=>`${escapeHtml(x[0])} (${x[1]})`).join(', ')||'—'}`
+ :UI[UI_LANG].summary;
+}
+function renderDocs(){
+ docSelect.innerHTML='';
+ docs.forEach((d,i)=>{const o=document.createElement('option');o.value=i;o.textContent=d.name;docSelect.appendChild(o)});
+ if(docs.length){
+   selectedDocIndex=Math.max(0,Math.min(selectedDocIndex,docs.length-1));
+   docSelect.value=String(selectedDocIndex);
+   reader.textContent=docs[selectedDocIndex].text;
+   document.querySelectorAll('.filechip').forEach((el,i)=>el.classList.toggle('active',i===selectedDocIndex));
+ }else reader.textContent='दस्तावेज़ चुनें।';
+}
+docSelect.onchange=()=>{selectedDocIndex=Number(docSelect.value)||0;document.querySelectorAll('.filechip').forEach((el,i)=>el.classList.toggle('active',i===selectedDocIndex));reader.textContent=docs[selectedDocIndex]?.text||'';renderAll()};
+function selectTerm(term){window.selectedTerm=term;trendTerm.textContent=term;renderTrend(term);showToast(`${term}`)}
+function renderTrend(term){
+ const svg=trendSvg;while(svg.firstChild)svg.removeChild(svg.firstChild);
+ if(!term||!docs.length){return}
+ const vals=docs.map(d=>termsFor(d.text).counts.get(term)||0),max=Math.max(1,...vals);
+ const W=900,H=180,p=34,iw=(W-p*2)/Math.max(1,vals.length-1);
+ let pts=vals.map((v,i)=>[p+i*iw,H-p-(v/max)*(H-p*2)]);
+ const ns='http://www.w3.org/2000/svg';
+ const line=document.createElementNS(ns,'polyline');line.setAttribute('fill','none');line.setAttribute('stroke','#4b79a8');line.setAttribute('stroke-width','2');line.setAttribute('points',pts.map(p=>p.join(',')).join(' '));svg.appendChild(line);
+ pts.forEach((p,i)=>{let c=document.createElementNS(ns,'circle');c.setAttribute('cx',p[0]);c.setAttribute('cy',p[1]);c.setAttribute('r','4');c.setAttribute('fill','#4b79a8');svg.appendChild(c);
+ let t=document.createElementNS(ns,'text');t.setAttribute('x',p[0]);t.setAttribute('y',H-10);t.setAttribute('text-anchor','middle');t.setAttribute('font-size','9');t.setAttribute('fill','#69727e');t.textContent=String(i+1);svg.appendChild(t)});
+ let lab=document.createElementNS(ns,'text');lab.setAttribute('x',p);lab.setAttribute('y',18);lab.setAttribute('font-size','11');lab.setAttribute('fill','#69727e');lab.textContent=`${term} · per-document count`;svg.appendChild(lab);
+}
+function escapeHtml(s){return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+
+/* ---------- file extraction ---------- */
+// PDF.js 3.x exposes pdfjsLib globally in a normal browser script.
+// The worker is configured once the library is available.
+function configurePdfJs(){
+  if(window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions){
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    return true;
+  }
+  return false;
+}
+configurePdfJs();
+
+function fileExtension(name){
+  const m=(name||'').toLowerCase().match(/\.([a-z0-9]+)$/);
+  return m?m[1]:'';
+}
+
+async function extractFile(file){
+  if(!file || !file.name) throw new Error('Invalid file.');
+  const ext=fileExtension(file.name);
+  if(!ext) throw new Error('File extension not found.');
+
+  if(['txt','md','html','htm','xml','json'].includes(ext)){
+    let txt=await file.text();
+    if(['html','htm','xml'].includes(ext)){
+      const parser=new DOMParser();
+      const doc=parser.parseFromString(txt,'text/html');
+      txt=doc.body?doc.body.innerText:txt;
+    }
+    return normalize(txt);
+  }
+
+  if(ext==='csv'){
+    const txt=await file.text();
+    if(window.Papa){
+      const parsed=Papa.parse(txt,{skipEmptyLines:true});
+      return normalize(parsed.data.map(r=>Array.isArray(r)?r.join(' '):String(r)).join('\n'));
+    }
+    // CSV fallback: still usable without PapaParse.
+    return normalize(txt.replace(/[,;\t]+/g,' '));
+  }
+
+  if(ext==='docx'){
+    if(!window.mammoth) throw new Error('DOCX reader is unavailable. Check internet connection and reload the page.');
+    const r=await mammoth.extractRawText({arrayBuffer:await file.arrayBuffer()});
+    return normalize(r.value||'');
+  }
+
+  if(ext==='pdf'){
+    if(!configurePdfJs()) throw new Error('PDF reader is unavailable. Check internet connection and reload the page.');
+    const pdf=await window.pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
+    const out=[];
+    for(let i=1;i<=pdf.numPages;i++){
+      const page=await pdf.getPage(i);
+      const c=await page.getTextContent();
+      out.push(c.items.map(x=>x.str||'').join(' '));
+    }
+    return normalize(out.join('\n'));
+  }
+
+  if(ext==='xlsx'||ext==='xls'){
+    if(!window.XLSX) throw new Error('Excel reader is unavailable. Check internet connection and reload the page.');
+    const wb=XLSX.read(await file.arrayBuffer(),{type:'array'});
+    const out=[];
+    wb.SheetNames.forEach(name=>{
+      const sh=wb.Sheets[name];
+      if(sh) out.push(XLSX.utils.sheet_to_csv(sh,{blankrows:false}));
+    });
+    return normalize(out.join('\n'));
+  }
+
+  if(ext==='pptx'){
+    if(!window.JSZip) throw new Error('PPTX reader is unavailable. Check internet connection and reload the page.');
+    const zip=await JSZip.loadAsync(await file.arrayBuffer());
+    const entries=Object.keys(zip.files).filter(n=>/^ppt\/slides\/slide\d+\.xml$/i.test(n));
+    const out=[];
+    for(const n of entries){
+      const xml=await zip.files[n].async('text');
+      const d=new DOMParser().parseFromString(xml,'application/xml');
+      out.push([...d.getElementsByTagName('a:t')].map(x=>x.textContent||'').join(' '));
+    }
+    return normalize(out.join('\n'));
+  }
+
+  throw new Error(`Unsupported file type: .${ext}`);
+}
+
+async function addFiles(files){
+  const list=[...files].filter(Boolean);
+  if(!list.length)return;
+  const added=[];
+  const failed=[];
+  showToast(UI_LANG==='hi'?`फ़ाइलें पढ़ी जा रही हैं… 0/${list.length}`:`Reading files… 0/${list.length}`);
+
+  for(let i=0;i<list.length;i++){
+    const file=list[i];
+    try{
+      const text=await extractFile(file);
+      if(!text.trim()) throw new Error('No readable text was found in this file.');
+      // Keep duplicate uploads possible, just like a corpus tool.
+      docs.push({name:file.name,text});
+      added.push(file.name);
+      showToast(UI_LANG==='hi'?`फ़ाइल ${i+1}/${list.length} जोड़ी गई: ${file.name}`:`Added ${i+1}/${list.length}: ${file.name}`);
+    }catch(e){
+      failed.push(`${file.name}: ${e && e.message ? e.message : e}`);
+    }
+  }
+
+  updateCorpus();
+
+  if(failed.length){
+    const msg=(UI_LANG==='hi'?`कुछ फ़ाइलें नहीं जुड़ पाईं: `:`Some files could not be added: `)+failed.join(' | ');
+    showToast(msg);
+    console.error('File import errors:',failed);
+  }else{
+    showToast(UI_LANG==='hi'?`${added.length} फ़ाइलें Corpus में जोड़ दी गईं`:`${added.length} file(s) added to corpus`);
+  }
+}
+function updateCorpus(){
+  if(selectedDocIndex>=docs.length) selectedDocIndex=Math.max(0,docs.length-1);
+  docCount.textContent=`${docs.length} ${UI_LANG==='hi'?'दस्तावेज़':'documents'}`;
+  filelist.innerHTML='';
+  docs.forEach((d,i)=>{
+    const s=document.createElement('button');
+    s.type='button';s.className='filechip'+(i===selectedDocIndex?' active':'');
+    s.textContent=d.name;s.title=UI_LANG==='hi'?`इस दस्तावेज़ को चुनें: ${d.name}`:`Select document: ${d.name}`;
+    s.onclick=()=>selectDocument(i);
+    filelist.appendChild(s);
+  });
+  status.textContent=docs.length?`${docs.length} ${UI_LANG==='hi'?'दस्तावेज़':'documents'}`:UI[UI_LANG].none;
+  renderAll();
+}
+
+/* ---------- upload controls ---------- */
+addBtn.onclick=()=>uploadModal.classList.add('open');
+closeUpload.onclick=()=>uploadModal.classList.remove('open');
+chooseFiles.onclick=()=>fileInput.click();
+fileInput.onchange=async e=>{
+  const selected=[...e.target.files];
+  // Reset immediately so selecting the same file again also fires change.
+  e.target.value='';
+  await addFiles(selected);
+  if(selected.length) uploadModal.classList.remove('open');
+};
+drop.ondragover=e=>{e.preventDefault();e.stopPropagation();drop.classList.add('drag')};
+drop.ondragleave=e=>{e.preventDefault();drop.classList.remove('drag')};
+drop.ondrop=async e=>{
+  e.preventDefault();e.stopPropagation();drop.classList.remove('drag');
+  const selected=[...e.dataTransfer.files];
+  await addFiles(selected);
+  if(selected.length) uploadModal.classList.remove('open');
+};
+
+pasteBtn.onclick=()=>pasteModal.classList.add('open');
+closePaste.onclick=()=>pasteModal.classList.remove('open');
+addPasted.onclick=()=>{
+ const text=normalize(pasteText.value);if(!text){return}
+ docs.push({name:pasteTitle.value.trim()||`Text ${docs.length+1}`,text});
+ pasteTitle.value='';pasteText.value='';pasteModal.classList.remove('open');updateCorpus();
+};
+clearBtn.onclick=()=>{docs=[];selectedDocIndex=0;scale.value='corpus';updateCorpus()};
+visible.oninput=()=>{settings.visible=+visible.value;visibleVal.textContent=visible.value;renderCloud()};
+stopToggle.onchange=()=>{settings.stop=stopToggle.checked;renderAll()};
+termSearch.oninput=renderTerms;searchBtn.onclick=renderTerms;
+scale.onchange=()=>{if(scale.value==='document'&&!docs.length){scale.value='corpus';showToast(UI_LANG==='hi'?'पहले कोई दस्तावेज़ जोड़ें':'Add a document first');return;}renderAll();showToast(scale.value==='document'?(UI_LANG==='hi'?`दस्तावेज़: ${docs[selectedDocIndex].name}`:`Document: ${docs[selectedDocIndex].name}`):(UI_LANG==='hi'?'Corpus चुना गया':'Corpus selected'))};
+optBtn.onclick=()=>optModal.classList.add('open');closeOpt.onclick=()=>optModal.classList.remove('open');
+applyOpt.onclick=()=>{
+ settings.font=fontOpt.value;settings.palette=paletteOpt.value;settings.bg=bgOpt.value;settings.maxTerms=Math.max(10,Math.min(500,+maxTerms.value||500));
+ document.querySelectorAll('.word').forEach(x=>x.style.fontFamily=settings.font);
+ optModal.classList.remove('open');renderCloud();
+};
+helpBtn.onclick=()=>showToast(UI_LANG==='hi'?'Cirrus corpus के frequent terms को word cloud में दिखाता है।':'Cirrus visualizes frequent corpus terms as a word cloud.');
+downloadBtn.onclick=()=>{
+ const data={documents:docs.map(d=>d.name),wordCount:tokenize(corpusText()).length,uniqueTerms:getTerms().length,topTerms:getTerms().slice(0,50)};
+ const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='hindi-cirrus-report.json';a.click();URL.revokeObjectURL(a.href);
+};
+document.querySelectorAll('.side-tabs button').forEach(b=>b.onclick=()=>{
+ document.querySelectorAll('.side-tabs button').forEach(x=>x.classList.remove('active'));b.classList.add('active');
+ ['terms','summary','reader'].forEach(k=>document.getElementById(k+'Tab').style.display=k===b.dataset.tab?'block':'none');
+});
+function showToast(msg){toast.textContent=msg;toast.style.display='block';clearTimeout(window.tt);window.tt=setTimeout(()=>toast.style.display='none',2200)}
+
+setLang('hi');
+</script>
+</body>
+</html>
